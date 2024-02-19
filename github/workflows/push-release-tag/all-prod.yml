@@ -1,0 +1,60 @@
+name: Manual-Prod-Deployment
+env:
+  IMAGEID: image_id
+  TAG: tag
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_location:
+          description: "Location to deploy to"
+          required: true
+          type: choice
+          options:
+            - us-east-1 
+            - ca-central-1
+
+jobs:
+  runtests:
+    runs-on: [self-hosted, Linux]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Tests
+        run: |
+          export tag=$GITHUB_REF_NAME
+          export ECR=925849382424.dkr.ecr.us-east-1.amazonaws.com
+          export repo=murallink-api
+
+          echo "*** Verifying image is available in ECR"
+          echo "*** Logging in to ECR"
+          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $ECR
+          available_images=`aws ecr list-images --registry-id 925849382424 --repository-name murallink-api --query imageIds[].imageTag --output text`
+          if ! echo $available_images | grep $tag; then
+            echo "*** Tag $tag not found in repo. Verify the image is present"
+            exit 1
+          else
+            echo "*** Found tag $tag in ECR repo"
+          fi
+
+  prod-us-east-1-manual-deploy:
+    name: Deploy prod in us-east-1
+    needs: runtests
+    runs-on: [self-hosted, Linux]
+    if: ${{ github.event.inputs.deploy_location == 'us-east-1' }}
+    steps:
+      - name: build-image
+        id: build-image
+        run: |
+            echo "$GITHUB_ENV"
+            echo -e "\n\n"
+            # env
+            tag=$GITHUB_REF_NAME
+            export ECR=925849382424.dkr.ecr.us-east-1.amazonaws.com
+            export repo=murallink-api
+
+            echo "*** Validating tag is valid or bailing."
+            tag_pattern='v[0-9]*'
+            if [[ $tag != $tag_pattern ]]; then echo "MUST deploy from a TAG" && exit 1; fi
+
+            echo "Deploying tagged image: ${ECR}/${repo}:$tag"
+

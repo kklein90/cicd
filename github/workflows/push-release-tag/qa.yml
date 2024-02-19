@@ -1,0 +1,39 @@
+name: QA-Deployments
+env:
+  IMAGEID: image_id
+  TAG: tag
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+
+  qa-us-east-1-manual-deploy:
+    name: Deploy qa in us-east-1
+    runs-on: [self-hosted, Linux]
+    if: ${{ github.ref == 'refs/heads/qa' }}
+    steps:
+      - name: deploy-qae
+        id: deploy-qae
+        run: |
+            tag=dev
+            newtag=qa
+            export ECR=925849382424.dkr.ecr.us-east-1.amazonaws.com
+            export repo=test-repo
+
+            echo "*** logging in to ECR"
+            aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $ECR
+
+            echo "*** Pulling 'dev' image"
+            docker pull ${ECR}/${repo}:$tag
+
+            echo "*** Retagging to 'qa'"
+            docker tag ${ECR}/${repo}:$tag ${ECR}/${repo}:$newtag
+
+            echo "***Pushing tagged image: ${ECR}/${repo}:$newtag"
+            docker push ${ECR}/${repo}:$newtag
+
+            echo "*** Running deploy actions..."
+
+

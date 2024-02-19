@@ -1,0 +1,65 @@
+name: Prod-tag-deploy
+on:
+  push:
+        tags:
+            - "v*.*.*"
+
+jobs:
+  grabrepo:
+    runs-on: [self-hosted, Linux]
+    steps:
+      - uses: actions/checkout@v4
+
+  branch:
+    name: ProdTagDeploy
+    runs-on: [self-hosted, Linux]
+    steps:
+      - name: deploy-tagged-imagee
+        id: deploy-tagged-imagee
+        run: |
+          tag=$GITHUB_REF_NAME
+          export ECR=925849382424.dkr.ecr.us-east-1.amazonaws.com
+          export repo=test-repo
+
+          echo "*** Find source branch of tag"
+          commit=`git log -n 1 --pretty='%h'`
+          branch=`git branch -a --contains ${commit} | grep -v HEAD | awk -F/ '{print $3}'`
+
+          echo "*** logging in to ECR"
+          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $ECR
+
+          echo "*** Running docker pull ${ECR}/${repo}:${branch}"
+          docker pull ${ECR}/${repo}:${branch}
+
+          echo "*** Retagging to $branch"
+          docker tag ${ECR}/${repo}:$branch ${ECR}/${repo}:$tag
+
+          echo "***Pushing tagged image: ${ECR}/${repo}:$tag"
+          docker push ${ECR}/${repo}:$tag
+
+          echo "*** Running deploy actions..."
+          
+            
+          #   export tag=`echo $GITHUB_SHA | /usr/bin/cut -c1-7` 
+          # #  same as tag export hash=$(git log -n 1 --pretty='%h')
+          # export branch=`git describe --exact-match --tags $(git log -n1 --pretty='%h')`
+          # export ECR=925849382424.dkr.ecr.us-east-1.amazonaws.com
+          # export repo=test-repo
+        
+          # echo "Tag = $tag"
+          # echo "hash = $hash"
+          # echo "branch = $branch"
+          # echo "Secret = ${{ secrets.DOCKER_PW }}"
+
+          # # base64 -i .env.production
+          # # echo ${{ secrets.ENV_PRODUCTION_FILE }} | base64 -d > .env.production
+          
+          # echo "*** logging in to ECR"
+          # aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $ECR
+        
+          # echo -e "*** building docker container with tag $tag"
+          # sudo docker build -t ${ECR}/${repo}:${tag} . 
+                    
+          # echo -e "*** Pushing tagged images to $ECR --> $repo"
+          # docker push ${ECR}/test-repo:$tag 
+

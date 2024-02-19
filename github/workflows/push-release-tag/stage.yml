@@ -1,0 +1,39 @@
+name: Stage-Deployments
+env:
+  IMAGEID: image_id
+  TAG: tag
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+
+  stage-us-east-1-manual-deploy:
+    name: Deploy stage in us-east-1
+    runs-on: [self-hosted, Linux]
+    if: ${{ github.ref == 'refs/heads/stage' }}
+    steps:
+      - name: deploy-stagee
+        id: deploy-stagee
+        run: |
+            tag=qa
+            newtag=stage
+            export ECR=925849382424.dkr.ecr.us-east-1.amazonaws.com
+            export repo=test-repo
+
+            echo "*** logging in to ECR"
+            aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $ECR
+
+            echo "*** Pulling 'qa' image"
+            docker pull ${ECR}/${repo}:$tag
+
+            echo "*** Retagging to 'stage'"
+            docker tag ${ECR}/${repo}:$tag ${ECR}/${repo}:$newtag
+
+            echo "***Pushing tagged image: ${ECR}/${repo}:$newtag"
+            docker push ${ECR}/${repo}:$newtag
+
+            echo "*** Running deploy actions..."
+
+

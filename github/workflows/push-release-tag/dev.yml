@@ -1,0 +1,55 @@
+name: Dev-Build-Deploy
+on:
+  push:
+        branches:
+            - dev
+
+jobs:
+  runtests:
+    runs-on: [self-hosted, Linux]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests
+        run: |
+          export tag=`git describe --exact-match --tags $(git log -n1 --pretty='%h')`
+          echo "Running on checked out tag: $tag"
+          echo "tag=${tag}" >> "$GITHUB_ENV"
+          
+      - name: SecretsCheck
+        run: grep -qRP "(?<![A-Z0-9])AKIA([A-Z0-9]){16}(?![A-Z0-9])" * && echo "AWS Secret Key Found!" && exit 1 || true
+
+  devbuild:
+    name: DevDockerBuild-Deploy
+    needs: runtests
+    runs-on: [self-hosted, Linux]
+    steps:
+      - name: build-image
+        id: build-image
+        run: |
+          export tag=`echo $GITHUB_SHA | /usr/bin/cut -c1-7` 
+          #  same as tag export hash=$(git log -n 1 --pretty='%h')
+          export branch=`git describe --exact-match --tags $(git log -n1 --pretty='%h')`
+          export ECR=925849382424.dkr.ecr.us-east-1.amazonaws.com
+          export repo=test-repo
+        
+          echo "Tag = $tag"
+          echo "hash = $hash"
+          echo "branch = $branch"
+          echo "Secret = ${{ secrets.DOCKER_PW }}"
+
+          # base64 -i .env.production
+          # echo ${{ secrets.ENV_PRODUCTION_FILE }} | base64 -d > .env.production
+          
+          echo "*** logging in to ECR"
+          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $ECR
+        
+          echo -e "*** building docker container with tag $tag"
+          sudo docker build -t ${ECR}/${repo}:${tag} . 
+
+          echo "*** Tagging the build 'latest'"
+          docker tag ${ECR}/${repo}:${tag} ${ECR}/${repo}:dev
+                    
+          echo -e "*** Pushing tagged images to $ECR --> $repo"
+          docker push ${ECR}/${repo}:$tag 
+          docker push ${ECR}/${repo}:dev
+          
